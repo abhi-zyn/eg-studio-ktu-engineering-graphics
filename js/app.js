@@ -23,14 +23,22 @@ const App = (function () {
     ul.addEventListener('click', e => {
       const btn = e.target.closest('button[data-mod]'); if (!btn) return;
       selectModule(btn.dataset.mod);
-      setNav(false);
+      setNav(false);            // hide the module list once a module is chosen
     });
   }
 
+  /* Sidebar: desktop = in-flow column that can be hidden; mobile = slide-in
+     drawer. One state for both; the "Modules" button in the header toggles it. */
+  const isMobile = () => window.matchMedia('(max-width:760px)').matches;
+  let navOpen = true;
   function setNav(open) {
+    navOpen = open;
     document.getElementById('sidebar').classList.toggle('open', open);
-    document.getElementById('navScrim').hidden = !open;
-    document.getElementById('navToggle').setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('nav-hidden', !open);
+    document.getElementById('navScrim').hidden = !(open && isMobile());
+    const t = document.getElementById('navToggle');
+    t.setAttribute('aria-expanded', String(open));
+    t.setAttribute('aria-label', open ? 'Hide module list' : 'Show module list');
   }
 
   function selectModule(id) {
@@ -59,8 +67,8 @@ const App = (function () {
     let theme = 'dark'; try { theme = localStorage.getItem('eg-theme') || 'dark'; } catch (e) {}
     buildNav();
     Workbench.bind();
-    document.getElementById('navToggle').addEventListener('click', () =>
-      setNav(!document.getElementById('sidebar').classList.contains('open')));
+    document.getElementById('navToggle').addEventListener('click', () => setNav(!navOpen));
+    setNav(!isMobile());      // open on desktop at start, closed on phones
     document.getElementById('navScrim').addEventListener('click', () => setNav(false));
     document.addEventListener('keydown', e => { if (e.key === 'Escape') setNav(false); });
     document.getElementById('themeToggle').addEventListener('click', () =>

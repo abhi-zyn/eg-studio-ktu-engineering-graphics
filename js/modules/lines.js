@@ -154,6 +154,10 @@
     // ----- dimensions (PART 2): mark true length, apparent lengths, heights,
     // depths and trace distances. All shown only on the final step and gated
     // by the "Show dimensions" toggle. Values rounded to 2 dp with "mm". -----
+    // Each dimension appears in the SAME step as the line/point it measures.
+    // [step of front view a'b' and b', step of top view ab and b] per case:
+    const VIEW_STEP = { parallel: [1, 1], perpHP: [1, 1], perpVP: [1, 1], inclHP: [1, 2], inclVP: [2, 1], both: [7, 7] }[kase] || [1, 1];
+    const [sFV, sTV] = VIEW_STEP;
     const DS = steps.length - 1;
     const f2 = (x) => EG.round(x).toFixed(2);
     const fvA = { x: A.x, y: A.h }, fvB = { x: B.x, y: B.h };
@@ -163,15 +167,15 @@
     // a'/a dimensions sit LEFT of everything at A (including HT/VT, which can lie left of A)
     const leftMost = Math.min(0, tr.HT ? tr.HT.x : 0, tr.VT ? tr.VT.x : 0);
     const offA = 9 + (A.x - leftMost);
-    if (A.h !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: A.h, label: `${f2(A.h)} mm`, prefer: 'left', off: offA });
+    if (A.h !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: A.h, label: `${f2(A.h)} mm`, prefer: 'left', off: offA, step: 0 });
     // b'/b dimensions sit RIGHT of everything (the swing arcs reach x = TL)
     const swings = ['both', 'inclHP', 'inclVP'].includes(kase);
     const rightMost = Math.max(B.x, swings ? TL : B.x, tr.HT ? tr.HT.x : B.x, tr.VT ? tr.VT.x : B.x);
     const offB = 9 + (rightMost - B.x);
-    if (B.h !== 0 && kase !== 'perpVP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: B.h, label: `${f2(B.h)} mm`, prefer: 'right', off: offB });
+    if (B.h !== 0 && kase !== 'perpVP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: B.h, label: `${f2(B.h)} mm`, prefer: 'right', off: offB, step: sFV });
     // distances below XY (a, b)
-    if (A.d !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: -A.d, label: `${f2(A.d)} mm`, prefer: 'left', off: offA });
-    if (B.d !== 0 && kase !== 'perpHP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: -B.d, label: `${f2(B.d)} mm`, prefer: 'right', off: offB });
+    if (A.d !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: -A.d, label: `${f2(A.d)} mm`, prefer: 'left', off: offA, step: 0 });
+    if (B.d !== 0 && kase !== 'perpHP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: -B.d, label: `${f2(B.d)} mm`, prefer: 'right', off: offB, step: sTV });
     // apparent lengths of the two views (with the cos relation when inclined to both)
     // Length labels show the working so students see WHY each view has that length:
     // a view parallel to the plane it is projected on shows TL; otherwise TL·cos(angle).
@@ -185,21 +189,27 @@
     };
     const fvPt = Math.hypot(fvB.x - fvA.x, fvB.y - fvA.y) < 1e-6;
     const tvPt = Math.hypot(tvB.x - tvA.x, tvB.y - tvA.y) < 1e-6;
-    if (!fvPt) D.push({ x1: fvA.x, y1: fvA.y, x2: fvB.x, y2: fvB.y, prefer: 'up', off: 7,
+    if (!fvPt) D.push({ x1: fvA.x, y1: fvA.y, x2: fvB.x, y2: fvB.y, prefer: 'up', off: 7, step: sFV,
       label: fvLabel() });
-    if (!tvPt) D.push({ x1: tvA.x, y1: tvA.y, x2: tvB.x, y2: tvB.y, prefer: 'down', off: 7,
+    if (!tvPt) D.push({ x1: tvA.x, y1: tvA.y, x2: tvB.x, y2: tvB.y, prefer: 'down', off: 7, step: sTV,
       label: tvLabel() });
     // true-length line (rotating-line method draws it explicitly for 'both')
     if (kase === 'both') {
       const b1p = { x: TL * C(theta), y: aH + TL * S(theta) };
-      D.push({ x1: 0, y1: aH, x2: b1p.x, y2: b1p.y, label: `TL = ${f2(TL)} mm`, prefer: 'down', off: 6 });   // below b1': a'b' lies above TL
+      // intermediate lines: shown while they are being constructed (steps 2–6),
+      // replaced by the final a'b' / ab dimensions at step 7
+      const pl = TL * C(theta), el = TL * C(phi);
+      D.push({ x1: 0, y1: -aV, x2: pl, y2: -aV, label: `ab1 = ${TL} cos ${theta}° = ${f2(pl)} mm`, prefer: 'up', off: 5, step: 2, until: 6 });
+      D.push({ x1: 0, y1: -aV, x2: el, y2: -aV - TL * S(phi), label: `ab2 = TL = ${f2(TL)} mm`, prefer: 'down', off: 6, step: 3, until: 6 });
+      D.push({ x1: 0, y1: aH, x2: el, y2: aH, label: `a'b2' = ${TL} cos ${phi}° = ${f2(el)} mm`, prefer: 'down', off: 5, step: 4, until: 6 });
+      D.push({ x1: 0, y1: aH, x2: b1p.x, y2: b1p.y, label: `TL = ${f2(TL)} mm`, prefer: 'down', off: 6, step: 1 });   // below b1': a'b' lies above TL
     }
     // trace distances from the projector of A
     // measured along XY between each trace's projector and A's projector:
     // VT distance just above XY, HT distance just below XY. p2 = A's projector,
     // so a label too long for a short dim is pushed past A (away from the a/a' dims).
-    if (tr.HT && Math.abs(tr.HT.x) > 1) D.push({ x1: tr.HT.x, y1: 0, x2: 0, y2: 0, label: `HT ${f2(Math.abs(tr.HT.x))} mm`, prefer: 'down', off: 6 });
-    if (tr.VT && Math.abs(tr.VT.x) > 1) D.push({ x1: tr.VT.x, y1: 0, x2: 0, y2: 0, label: `VT ${f2(Math.abs(tr.VT.x))} mm`, prefer: 'up', off: 6 });
+    if (tr.HT && Math.abs(tr.HT.x) > 1) D.push({ x1: tr.HT.x, y1: 0, x2: 0, y2: 0, label: `HT ${f2(Math.abs(tr.HT.x))} mm`, prefer: 'down', off: 6, step: stepTrace });
+    if (tr.VT && Math.abs(tr.VT.x) > 1) D.push({ x1: tr.VT.x, y1: 0, x2: 0, y2: 0, label: `VT ${f2(Math.abs(tr.VT.x))} mm`, prefer: 'up', off: 6, step: stepTrace });
     D.forEach(d => prims.push(Object.assign({ kind: 'dimension', step: DS }, d)));
 
     // ----- results -----

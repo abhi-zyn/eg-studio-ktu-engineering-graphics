@@ -26,8 +26,8 @@
     // top view a
     prims.push({ kind: 'point', x: 0, y: tvY, label: 'a', dir: tvDir, role: 'visible', step: 3 });
     // dimensions (aligned, vermilion, pushed to the left of the projector)
-    if (heightAboveHP !== 0) prims.push({ kind: 'dimension', x1: 0, y1: 0, x2: 0, y2: fvY, label: `${EG.round(h)} mm`, prefer: 'left', off: 9, step: 4 });
-    if (distFront !== 0) prims.push({ kind: 'dimension', x1: 0, y1: 0, x2: 0, y2: tvY, label: `${EG.round(d)} mm`, prefer: 'left', off: 9, step: 4 });
+    if (heightAboveHP !== 0) prims.push({ kind: 'dimension', x1: 0, y1: 0, x2: 0, y2: fvY, label: `${EG.round(h)} mm`, prefer: 'left', off: 9, step: 2 });   // with a'
+    if (distFront !== 0) prims.push({ kind: 'dimension', x1: 0, y1: 0, x2: 0, y2: tvY, label: `${EG.round(d)} mm`, prefer: 'left', off: 9, step: 3 });   // with a
     prims.push({ kind: 'text', x: 9, y: fvY || 2, text: 'FV (elevation)', color: '#555', size: 3.4, step: 2 });
     prims.push({ kind: 'text', x: 9, y: (tvY || -2), text: 'TV (plan)', color: '#555', size: 3.4, step: 3 });
 
@@ -37,7 +37,7 @@
       { title: 'Erect the projector', desc: 'Both views of a point lie on one vertical projector. Mark it through the chosen position.' },
       { title: "Plot the front view a'", desc: heightAboveHP === 0 ? "The point is in the HP, so a' lies on XY." : `Measure ${h} mm ${heightAboveHP > 0 ? 'above' : 'below'} XY — this is the front view a'.` },
       { title: 'Plot the top view a', desc: distFront === 0 ? 'The point is in the VP, so a lies on XY.' : `Measure ${d} mm ${distFront > 0 ? 'below' : 'above'} XY — this is the top view a.` },
-      { title: 'Dimension & identify quadrant', desc: `Add the two distances. This point lies in the <b>${q.name}</b> (${q.desc}).` }
+      { title: 'Dimension & identify quadrant', desc: `Read the two distances off the sheet. This point lies in the <b>${q.name}</b> (${q.desc}).` }
     ];
 
     // ---- 3D spec ----

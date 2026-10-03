@@ -87,6 +87,21 @@ eg-tool/
 
 ---
 
+## v4 — Focus mode, per-step dimensions, full screen
+
+- **Sidebar hides after a module is chosen.** The **Modules** button in the header shows it again
+  (desktop: in-layout column; phone: slide-in drawer).
+- **Inputs hide after Draw** (also after *Load & draw* / practice). A one-line summary of the values
+  appears above the drawing with **Edit inputs** to bring the form back; *Reset* and the *Hide* link
+  in the Inputs card also control it. Results move under the views while the inputs are hidden.
+- **Lengths appear with each line, not only at the end.** Every dimension carries the `step` of the
+  line it measures (heights of a'/a at step 1, each view with its own step, traces at the trace step).
+  In the rotating-line method the intermediate lines are dimensioned too — `ab1 = TL cos θ`,
+  `ab2 = TL`, `a'b2' = TL cos φ` — and are shown only during their construction steps
+  (primitive option `until`), so the final sheet stays clean. New dims fade in with their line.
+- **Full screen** button on the 2D and 3D panels (Fullscreen API, with a full-window fallback for
+  iPhone Safari). In 2D full screen there are ‹ / › step controls; ← / → keys step anywhere.
+
 ## v3 — Original layout restored, restyled, with dimensions
 
 The v2 "title block / drawer / timeline" layout was replaced by the **original v1 layout**

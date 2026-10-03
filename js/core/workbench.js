@@ -15,6 +15,7 @@ const Workbench = (function () {
   let showDims = true;        // "Dimensions" toggle (also controls exports)
   let showPlanes = true;      // "HP / VP" toggle in the 3D panel
   let themeName = 'dark';
+  let inputsHidden = false;   // inputs collapse to a summary bar after Draw
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
@@ -48,12 +49,17 @@ const Workbench = (function () {
     try { draw(); } catch (e) { /* ignore initial */ }
   }
 
-  function teardown() { if (scene3d) { scene3d.dispose(); scene3d = null; } }
+  function teardown() {
+    if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    exitPseudoFs(); inputsHidden = false;
+    if (scene3d) { scene3d.dispose(); scene3d = null; }
+  }
 
   /* ---------- Left column: form + buttons + results ---------- */
   function buildControlColumn(m) {
-    const col = h(`<div></div>`);
-    const form = h(`<div class="card"><h3>Inputs <span class="tag">${m.quadrantNote || 'first angle'}</span></h3>
+    const col = h(`<div id="ctrl-col"></div>`);
+    const form = h(`<div class="card"><h3>Inputs <span class="tag">${m.quadrantNote || 'first angle'}</span>
+        <span class="h-tools"><button type="button" class="linkbtn" id="btn-hide-inputs" title="Hide the inputs (they also hide after Draw)">Hide</button></span></h3>
       <form id="form-fields" novalidate></form>
       <div class="field-err" id="form-error" role="alert" aria-live="assertive"></div>
       <div class="btn-row">
@@ -66,8 +72,8 @@ const Workbench = (function () {
       </div></div>`);
     const ff = form.querySelector('#form-fields');
     m.fields.forEach(f => ff.appendChild(fieldRow(f)));
-    ff.addEventListener('submit', e => { e.preventDefault(); draw(); });   // Enter key draws
-    ff.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); draw(); } });
+    ff.addEventListener('submit', e => { e.preventDefault(); draw({ user: true }); });   // Enter key draws
+    ff.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); draw({ user: true }); } });
     col.appendChild(form);
 
     col.appendChild(h(`<div class="card" id="results-card" style="margin-top:16px">
@@ -91,10 +97,15 @@ const Workbench = (function () {
 
   /* ---------- Right column: 2D + 3D + steps ---------- */
   function buildDisplayColumn(m) {
-    const col = h(`<div></div>`);
+    const col = h(`<div id="display-col"></div>`);
+    // summary bar shown when the inputs are hidden (after Draw)
+    col.appendChild(h(`<div class="inputs-bar" id="inputs-bar" hidden>
+      <span class="ib-title">Inputs</span><span class="ib-vals" id="inputs-summary"></span>
+      <button class="btn secondary" type="button" id="btn-edit-inputs">Edit inputs</button></div>`));
     const views = h(`<div class="grid-views"></div>`);
     views.appendChild(h(`<div class="card view-card"><h3>2D Orthographic Views <span class="tag">FV above · TV below XY</span>
-        <span class="h-tools"><label class="chk"><input type="checkbox" id="chk-dims" ${showDims ? 'checked' : ''}/>Dimensions</label></span></h3>
+        <span class="h-tools"><label class="chk"><input type="checkbox" id="chk-dims" ${showDims ? 'checked' : ''}/>Dimensions</label>
+        <button type="button" class="linkbtn fs-btn" data-fs="2d" aria-label="Show 2D views in full screen">Full screen</button></span></h3>
       <div class="svg-wrap" id="svg-host-wrap">
         <div id="svg-host" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center"><span class="svg-empty">Drawing…</span></div>
         <div class="svg-tools" aria-label="Sheet zoom">
@@ -102,10 +113,16 @@ const Workbench = (function () {
           <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
           <button type="button" id="zoom-fit" aria-label="Fit drawing" style="width:auto;padding:0 8px">fit</button>
         </div>
+        <div class="svg-steps" aria-label="Step controls">
+          <button type="button" id="fs-prev" aria-label="Previous step">‹</button>
+          <span id="fs-step">—</span>
+          <button type="button" id="fs-next" aria-label="Next step">›</button>
+        </div>
       </div>
       ${m.legend === false ? '' : legendHTML()}</div>`));
     views.appendChild(h(`<div class="card view-card"><h3>3D Pictorial <span class="tag">drag · scroll · pinch</span>
-        <span class="h-tools"><label class="chk"><input type="checkbox" id="chk-planes" ${showPlanes ? 'checked' : ''}/>HP / VP</label></span></h3>
+        <span class="h-tools"><label class="chk"><input type="checkbox" id="chk-planes" ${showPlanes ? 'checked' : ''}/>HP / VP</label>
+        <button type="button" class="linkbtn fs-btn" data-fs="3d" aria-label="Show 3D view in full screen">Full screen</button></span></h3>
       <div class="three-wrap"><canvas id="three-canvas" aria-label="3D model of the object with HP and VP"></canvas>
         <div class="three-axes"><span><i style="background:#8A7A5A"></i>HP</span><span><i style="background:#5E6B73"></i>VP</span><span><i style="background:#C9A35A"></i>plan</span><span><i style="background:#9FB4C0"></i>elevation</span></div>
         <div class="three-hint">first angle · object in the quadrant entered</div></div></div>`));
@@ -168,7 +185,11 @@ const Workbench = (function () {
       const t = e.target.closest && e.target.closest('button');
       if (!t) return;
       switch (t.id) {
-        case 'btn-draw': return draw();
+        case 'btn-draw': return draw({ user: true });
+        case 'btn-hide-inputs': return setInputsHidden(true);
+        case 'btn-edit-inputs': return setInputsHidden(false, true);
+        case 'fs-prev': return setStep(stepIndex - 1, true);
+        case 'fs-next': return setStep(stepIndex + 1, true);
         case 'btn-reset': return reset();
         case 'btn-first': return setStep(0, true);
         case 'btn-next': return setStep(stepIndex + 1, true);
@@ -180,10 +201,20 @@ const Workbench = (function () {
         case 'zoom-out': return zoomBy(1.25);
         case 'zoom-fit': return fitView();
       }
-      if (t.dataset.tab) switchTab(t);
+      if (t.dataset.fs) toggleFullscreen(t);
+      else if (t.dataset.tab) switchTab(t);
       else if (t.dataset.sample != null) loadSample(+t.dataset.sample);
       else if (t.dataset.step != null) setStep(+t.dataset.step, true);
     });
+    // ← / → step through the construction (when not typing in a field)
+    document.addEventListener('keydown', (e) => {
+      if (!model || /INPUT|SELECT|TEXTAREA/.test((e.target.tagName || ''))) return;
+      if (e.key === 'ArrowRight') { setStep(stepIndex + 1, true); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft') { setStep(stepIndex - 1, true); e.preventDefault(); }
+      else if (e.key === 'Escape' && document.querySelector('.pseudo-fs')) exitPseudoFs();
+    });
+    document.addEventListener('fullscreenchange', syncFsButtons);
+    document.addEventListener('webkitfullscreenchange', syncFsButtons);
     document.addEventListener('change', (e) => {
       if (e.target.id === 'chk-dims') { showDims = e.target.checked; render2D(false); }
       if (e.target.id === 'chk-planes') { showPlanes = e.target.checked; if (scene3d) scene3d.setPlanesVisible(showPlanes); }
@@ -228,7 +259,9 @@ const Workbench = (function () {
     return null;
   }
 
-  function draw() {
+  // opts.user = true when the student pressed Draw / loaded a problem:
+  // the inputs then collapse so the drawing gets the space.
+  function draw(opts = {}) {
     const errBox = document.getElementById('form-error');
     errBox.textContent = '';
     document.querySelectorAll('#form-fields [aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
@@ -249,6 +282,59 @@ const Workbench = (function () {
     // "From step 1" / Next to replay the construction one step at a time.
     setStep(m.steps.length - 1);
     if (scene3d) scene3d.buildFromSpec(m.spec3D);
+    updateSummary();
+    if (opts.user) setInputsHidden(true);
+  }
+
+  /* ---------- Inputs: hide after Draw, summary bar + "Edit inputs" ---------- */
+  function updateSummary() {
+    const box = document.getElementById('inputs-summary'); if (!box || !current) return;
+    box.innerHTML = current.fields.map(f => {
+      const el = document.getElementById('fld-' + f.name); if (!el) return '';
+      const v = f.type === 'select' ? (el.options[el.selectedIndex] || {}).text : el.value + (f.unit ? ' ' + f.unit : '');
+      return `<span><i>${f.label}</i> ${v}</span>`;
+    }).join('');
+  }
+  function setInputsHidden(v, focus) {
+    const grid = document.querySelector('#workbench .grid'); if (!grid) return;
+    inputsHidden = v;
+    const ctrl = document.getElementById('ctrl-col'), disp = document.getElementById('display-col');
+    const results = document.getElementById('results-card'), steps = document.getElementById('steps-card');
+    grid.classList.toggle('inputs-hidden', v);
+    ctrl.hidden = v;
+    document.getElementById('inputs-bar').hidden = !v;
+    // results stay visible: move them under the views while the inputs are hidden
+    if (v) { disp.insertBefore(results, steps); results.classList.add('results-wide'); }
+    else { ctrl.appendChild(results); results.classList.remove('results-wide'); }
+    if (!v && focus) {
+      const first = ctrl.querySelector('input,select');
+      ctrl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (first) first.focus({ preventScroll: true });
+    }
+  }
+
+  /* ---------- Full screen for the 2D / 3D panels ----------
+     Uses the Fullscreen API; falls back to a fixed full-window panel
+     (e.g. iPhone Safari, which has no element fullscreen). */
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function toggleFullscreen(btn) {
+    const card = btn.closest('.view-card');
+    if (fsEl() === card) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    if (card.classList.contains('pseudo-fs')) { exitPseudoFs(); return; }
+    const req = card.requestFullscreen || card.webkitRequestFullscreen;
+    if (req) {
+      Promise.resolve(req.call(card)).catch(() => enterPseudoFs(card));
+    } else enterPseudoFs(card);
+  }
+  function enterPseudoFs(card) { card.classList.add('pseudo-fs'); document.body.classList.add('no-scroll'); syncFsButtons(); }
+  function exitPseudoFs() { document.querySelectorAll('.pseudo-fs').forEach(c => c.classList.remove('pseudo-fs')); document.body.classList.remove('no-scroll'); syncFsButtons(); }
+  function syncFsButtons() {
+    document.querySelectorAll('.fs-btn').forEach(b => {
+      const card = b.closest('.view-card');
+      const on = fsEl() === card || card.classList.contains('pseudo-fs');
+      b.textContent = on ? 'Exit full screen' : 'Full screen';
+      card.classList.toggle('is-fs', on);
+    });
   }
 
   function render2D(animate) {
@@ -284,6 +370,10 @@ const Workbench = (function () {
     document.getElementById('step-box').innerHTML =
       `<span class="step-title"><span class="n">${pad2(stepIndex + 1)}</span>${s.title}</span>${s.desc || ''}`;
     document.getElementById('step-counter').textContent = `step ${stepIndex + 1} / ${n}`;
+    const fsStep = document.getElementById('fs-step');
+    if (fsStep) fsStep.textContent = `${pad2(stepIndex + 1)} / ${pad2(n)} · ${s.title}`;
+    const fp = document.getElementById('fs-prev'), fn = document.getElementById('fs-next');
+    if (fp) fp.disabled = stepIndex === 0; if (fn) fn.disabled = stepIndex === n - 1;
     document.querySelectorAll('#step-ticks button').forEach((b, k) => {
       b.classList.toggle('cur', k === stepIndex); b.classList.toggle('done', k < stepIndex);
       b.setAttribute('aria-selected', String(k === stepIndex));
@@ -297,12 +387,13 @@ const Workbench = (function () {
     current.fields.forEach(f => { const el = document.getElementById('fld-' + f.name); if (el) el.value = f.default; });
     document.getElementById('form-error').textContent = '';
     draw();
+    setInputsHidden(false);
   }
 
   function loadSample(i) {
     const s = current.samples[i]; if (!s) return;
     Object.entries(s.values).forEach(([k, v]) => { const el = document.getElementById('fld-' + k); if (el) el.value = v; });
-    draw();
+    draw({ user: true });
     document.getElementById('svg-host').scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
@@ -311,7 +402,7 @@ const Workbench = (function () {
     if (!curSvg) return;
     const clean = curSvg.cloneNode(true);
     clean.setAttribute('viewBox', curSvg.dataset.vb0);           // ignore on-screen pan/zoom
-    clean.querySelectorAll('.anim-draw').forEach(n => { n.removeAttribute('class'); n.removeAttribute('style'); });
+    clean.querySelectorAll('.anim-draw, .anim-fade').forEach(n => { n.removeAttribute('class'); n.removeAttribute('style'); });
     const name = (current.title || 'drawing').replace(/\s+/g, '_');
     if (kind === 'png') await Exporter.exportPNG(clean, name + '.png');
     else await Exporter.exportPDF(clean, `${pad2(current.num)}. ${current.title}`, name + '.pdf');
@@ -333,7 +424,7 @@ const Workbench = (function () {
     wrap.addEventListener('wheel', e => { if (!curSvg) return; e.preventDefault(); const [fx, fy] = rel(e); zoomBy(e.deltaY > 0 ? 1.12 : 1 / 1.12, fx, fy); }, { passive: false });
     wrap.addEventListener('dblclick', fitView);
     wrap.addEventListener('pointerdown', e => {
-      if (!curSvg || e.target.closest('.svg-tools')) return;
+      if (!curSvg || e.target.closest('.svg-tools, .svg-steps')) return;
       wrap.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
       last = [e.clientX, e.clientY]; wrap.classList.add('panning');
       if (pts.size === 2) { const [p, q] = [...pts.values()]; pinch0 = Math.hypot(p[0] - q[0], p[1] - q[1]); }
@@ -359,7 +450,7 @@ const Workbench = (function () {
     if (!current.practice) return;
     const box = document.getElementById('tab-practice'); if (!box) return;
     const p = current.practice();
-    const fill = () => { Object.entries(p.values).forEach(([k, v]) => { const el = document.getElementById('fld-' + k); if (el) el.value = v; }); draw(); };
+    const fill = () => { Object.entries(p.values).forEach(([k, v]) => { const el = document.getElementById('fld-' + k); if (el) el.value = v; }); draw({ user: true }); };
     box.innerHTML = `<div class="practice-q">
       <div class="q-text"><b>Question.</b> ${p.question}</div>
       <div class="btn-row">

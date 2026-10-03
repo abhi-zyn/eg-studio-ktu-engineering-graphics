@@ -13,7 +13,8 @@
      arc    {cx,cy,r,a0,a1,role}                 degrees, ccw (paper)
      point  {x,y,label,dir,role}
      text   {x,y,text,color,anchor,size}
-     dimension {x1,y1,x2,y2,label,off,side}       <- NEW aligned dim
+     dimension {x1,y1,x2,y2,label,off,side,prefer}  aligned dimension
+   every primitive: step (first step shown), until (optional last step shown)
    role -> style: visible|construction|hidden|projector|axis|dim|locus
    ===================================================================== */
 const Svg2D = (function () {
@@ -188,7 +189,9 @@ const Svg2D = (function () {
     const currentStep = opts.currentStep;
     const animate = !!opts.animate;
 
-    let vis = prims.filter(p => (p.step == null ? 0 : p.step) <= maxStep);
+    // a primitive is visible from its `step` onward, and (optionally) only
+    // up to its `until` step — used for intermediate construction dimensions
+    let vis = prims.filter(p => (p.step == null ? 0 : p.step) <= maxStep && (p.until == null || maxStep <= p.until));
     if (!showDims) vis = vis.filter(p => p.kind !== 'dimension' && p.kind !== 'dim');
 
     // frame from ALL steps so the drawing does not jump while stepping
@@ -288,7 +291,11 @@ const Svg2D = (function () {
           break;
         }
         case 'dim': case 'dimension': {
-          dimension(dimGroup, { x: sx(p.x1), y: sy(p.y1) }, { x: sx(p.x2), y: sy(p.y2) }, p.label != null ? p.label : (p.text || ''), { off: p.off, side: p.side, prefer: p.prefer, pal, reg });
+          // each dimension in its own group so the ones added in the current
+          // step can fade in together with their line
+          const g = el('g', (animate && p.step === currentStep) ? { class: 'anim-fade' } : {});
+          dimension(g, { x: sx(p.x1), y: sy(p.y1) }, { x: sx(p.x2), y: sy(p.y2) }, p.label != null ? p.label : (p.text || ''), { off: p.off, side: p.side, prefer: p.prefer, pal, reg });
+          dimGroup.appendChild(g);
           break;
         }
       }
