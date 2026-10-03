@@ -51,16 +51,34 @@ const Svg2D = (function () {
         case 'dim': case 'dimension': {
           // a dimension extends `off` perpendicular to the line plus its text;
           // inflate so offset dim lines/labels are never clipped by the sheet.
-          const m = (p.off == null ? 9 : p.off) + ((p.label || p.text || '').length * 0.9) / 2 + 5;
-          acc(p.x1 - m, p.y1 - m); acc(p.x1 + m, p.y1 + m); acc(p.x2 - m, p.y2 - m); acc(p.x2 + m, p.y2 + m);
+          // inflate only along the dimension's normal (offset side unknown, so
+          // both ways) and along its own direction for a displaced label
+          const L = Math.hypot(p.x2 - p.x1, p.y2 - p.y1) || 1;
+          const ux = (p.x2 - p.x1) / L, uy = (p.y2 - p.y1) / L, nx = -uy, ny = ux;
+          const m = (p.off == null ? 9 : p.off) + 7;
+          const tw = (p.label || p.text || '').length * 3.5 * 0.6;
+          const along = tw > L - 2 ? tw + 6 : Math.max(0, (tw - L) / 2) + 2;
+          [[p.x1, p.y1, -along], [p.x2, p.y2, along]].forEach(([x, y, k]) => {
+            acc(x + nx * m, y + ny * m); acc(x - nx * m, y - ny * m); acc(x + ux * k, y + uy * k);
+          });
           break;
         }
-        case 'point': case 'text': acc(p.x, p.y); break;
+        case 'point': acc(p.x, p.y); acc(p.x + 8, p.y + 5); acc(p.x - 8, p.y - 5); break;   // + label room
+        case 'text': {                                   // include the text run
+          const w = (p.text || '').length * (p.size || 3.6) * 0.6, a = p.anchor || 'start';
+          const x0 = a === 'start' ? p.x : a === 'end' ? p.x - w : p.x - w / 2;
+          acc(x0, p.y); acc(x0 + w, p.y + (p.size || 3.6)); break;
+        }
         case 'circle': case 'arc': acc(p.cx - p.r, p.cy - p.r); acc(p.cx + p.r, p.cy + p.r); break;
         case 'polygon': p.pts.forEach(([x, y]) => acc(x, y)); break;
       }
     }
     if (!isFinite(a.minX)) a = { minX: -10, maxX: 10, minY: -10, maxY: 10 };
+    // minimum sheet extent (mm) so small drawings keep a sensible print scale
+    // instead of being blown up (keeps text/arrow sizes consistent)
+    const MINW = 150, MINH = 120;
+    if (a.maxX - a.minX < MINW) { const c = (a.maxX + a.minX) / 2; a.minX = c - MINW / 2; a.maxX = c + MINW / 2; }
+    if (a.maxY - a.minY < MINH) { const c = (a.maxY + a.minY) / 2; a.minY = c - MINH / 2; a.maxY = c + MINH / 2; }
     acc(a.minX, 0); acc(a.maxX, 0);
     return a;
   }
@@ -68,27 +86,45 @@ const Svg2D = (function () {
   function defsMarkers(pal) {
     const defs = el('defs', {});
     const mk = (id, d, refX) => {
-      const m = el('marker', { id, markerUnits: 'userSpaceOnUse', markerWidth: 5, markerHeight: 5, refX, refY: 2, orient: 'auto' });
+      const m = el('marker', { id, markerUnits: 'userSpaceOnUse', markerWidth: 3.2, markerHeight: 1.6, refX, refY: 0.6, orient: 'auto' });
       m.appendChild(el('path', { d, fill: pal.accent }));
       defs.appendChild(m);
     };
-    mk('egArrowEnd', 'M0,0 L4,2 L0,4 Z', 3.7);     // tip forward
-    mk('egArrowStart', 'M4,0 L0,2 L4,4 Z', 0.3);   // tip backward
+    mk('egArrowEnd', 'M0,0 L3,0.6 L0,1.2 Z', 2.9);     // tip forward  (3 x 1.2, BIS proportion)
+    mk('egArrowStart', 'M3,0 L0,0.6 L3,1.2 Z', 0.1);   // tip backward
     return defs;
   }
 
+  /* ---- collision registry ----
+     Every placed label (point labels, dimension texts) is stored as a row
+     of sample points along its text, so long rotated labels collide properly. */
+  const CW = 0.6;                                  // mono char width / font-size
+  function textSamples(cx, cy, ux, uy, len) {      // samples along a text run
+    const out = [], n = Math.max(1, Math.ceil(len / 2));
+    for (let i = 0; i <= n; i++) { const t = -len / 2 + (len * i) / n; out.push({ x: cx + ux * t, y: cy + uy * t }); }
+    return out;
+  }
+  const hits = (reg, pts, clr) => pts.some(q => reg.samples.some(o => Math.hypot(o.x - q.x, o.y - q.y) < clr));
+
   /* ---- reusable aligned dimension ----
-     Draws onto `group` in the SVG user coordinate system (screen units).
-     A,B = measured endpoints; opts {off, side, pal, reg}. */
+     dimension(group, A, B, label, opts)  — A,B in SVG user units (screen).
+     Draws: 2 thin extension lines, a dimension line parallel to AB at
+     `off`, arrowheads (SVG markers) at both ends, and the value centred
+     above the line, rotated along it and kept upright (aligned system).
+     opts: {off, side(+1/-1), prefer('left'|'right'|'up'|'down'), pal, reg}
+     - auto-offset: pushes the dim outward until its text is clear of
+       every label already on the sheet (registry).
+     - short dims: arrows go outside; text goes beyond the B end. */
   function dimension(group, A, B, label, opts) {
-    const pal = opts.pal, reg = opts.reg || { labels: [] };
+    const pal = opts.pal, reg = opts.reg || (opts.reg = { samples: [] });
+    reg.samples = reg.samples || [];
     const dx = B.x - A.x, dy = B.y - A.y; const L = Math.hypot(dx, dy) || 1;
-    const ux = dx / L, uy = dy / L; let nx = -uy, ny = ux;        // unit + normal
+    const ux = dx / L, uy = dy / L; const nx = -uy, ny = ux;      // unit + normal
     let off = opts.off == null ? 9 : opts.off;
     let sign = opts.side;
     const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
     if (sign == null && opts.prefer) {
-      // pick the sign whose normal best matches the requested screen direction
+      // pick the normal sign that best matches the requested screen direction
       const want = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[opts.prefer] || [0, -1];
       sign = (nx * want[0] + ny * want[1]) >= 0 ? 1 : -1;
     } else if (sign == null && reg.centroid) {
@@ -96,31 +132,53 @@ const Svg2D = (function () {
       sign = dP(1) >= dP(-1) ? 1 : -1;
     } else if (sign == null) sign = 1;
 
-    // auto-offset to dodge existing labels
-    const labelLen = (label || '').length;
-    const rad = Math.max(5, labelLen * 1.05);
+    const FS = 3.5, tw = (label || '').length * FS * CW;          // text width
+    // text fits between the arrows (long dims may overrun the ends slightly)
+    const fits = tw <= L - 2 || (L >= 30 && tw <= L * 1.35);
+    let ang = Math.atan2(uy, ux) * 180 / Math.PI; let flip = false;
+    if (ang > 90 || ang < -90) { ang += 180; flip = true; }
+
+    // text centre for a given offset (inside, or beyond the B end if it doesn't fit)
+    const textAt = (o) => {
+      const base = { x: mx + nx * sign * o, y: my + ny * sign * o };
+      if (fits) return { x: base.x + nx * sign * 1.9, y: base.y + ny * sign * 1.9 };
+      const along = L / 2 + 3 + tw / 2;                            // past the B end
+      return { x: base.x + ux * along + nx * sign * 1.2, y: base.y + uy * along + ny * sign * 1.2 };
+    };
+    // auto-offset: move outward until the whole text run is clear
     let tries = 0, tc;
-    while (tries < 9) {
-      tc = { x: mx + nx * sign * (off + 2.6), y: my + ny * sign * (off + 2.6) };
-      const hit = (reg.labels || []).some(o => Math.hypot(o.x - tc.x, o.y - tc.y) < (o.r + rad) * 0.55);
-      if (!hit) break; off += 5.5; tries++;
+    while (true) {
+      tc = textAt(off);
+      const samp = textSamples(tc.x, tc.y - FS * 0.35, ux, uy, tw);
+      if (!hits(reg, samp, 3.0) || tries >= 12) break;
+      off += 3.5; tries++;
     }
+
     const w = WIDTH.dim;
     const Ao = { x: A.x + nx * sign * off, y: A.y + ny * sign * off };
     const Bo = { x: B.x + nx * sign * off, y: B.y + ny * sign * off };
     const gap = 1.4, extBeyond = 2.0;
-    // extension lines
+    // extension lines (small gap from the object, run 2 units past the dim line)
     group.appendChild(el('line', { x1: A.x + nx * sign * gap, y1: A.y + ny * sign * gap, x2: A.x + nx * sign * (off + extBeyond), y2: A.y + ny * sign * (off + extBeyond), stroke: pal.accent, 'stroke-width': w }));
     group.appendChild(el('line', { x1: B.x + nx * sign * gap, y1: B.y + ny * sign * gap, x2: B.x + nx * sign * (off + extBeyond), y2: B.y + ny * sign * (off + extBeyond), stroke: pal.accent, 'stroke-width': w }));
-    // dimension line with arrowheads
-    group.appendChild(el('line', { x1: Ao.x, y1: Ao.y, x2: Bo.x, y2: Bo.y, stroke: pal.accent, 'stroke-width': w, 'marker-start': 'url(#egArrowStart)', 'marker-end': 'url(#egArrowEnd)' }));
-    // upright text, centred above the dim line
-    let ang = Math.atan2(uy, ux) * 180 / Math.PI; if (ang > 90 || ang < -90) ang += 180;
-    const tx = (Ao.x + Bo.x) / 2 + nx * sign * 1.9, ty = (Ao.y + Bo.y) / 2 + ny * sign * 1.9;
-    const t = el('text', { x: tx, y: ty, 'font-size': 3.3, 'font-family': '"IBM Plex Mono", monospace', fill: pal.accent, 'text-anchor': 'middle', transform: `rotate(${ang.toFixed(2)} ${tx} ${ty})` });
-    t.setAttribute('dominant-baseline', 'auto');
+    // dimension line + arrowheads; if too short for two arrowheads (< 9),
+    // draw them OUTSIDE pointing inwards (BIS practice)
+    if (L >= 9) {
+      group.appendChild(el('line', { x1: Ao.x, y1: Ao.y, x2: Bo.x, y2: Bo.y, stroke: pal.accent, 'stroke-width': w, 'marker-start': 'url(#egArrowStart)', 'marker-end': 'url(#egArrowEnd)' }));
+    } else {
+      const k = 5;
+      group.appendChild(el('line', { x1: Ao.x, y1: Ao.y, x2: Bo.x, y2: Bo.y, stroke: pal.accent, 'stroke-width': w }));
+      group.appendChild(el('line', { x1: Ao.x - ux * k, y1: Ao.y - uy * k, x2: Ao.x, y2: Ao.y, stroke: pal.accent, 'stroke-width': w, 'marker-end': 'url(#egArrowEnd)' }));
+      group.appendChild(el('line', { x1: Bo.x + ux * k, y1: Bo.y + uy * k, x2: Bo.x, y2: Bo.y, stroke: pal.accent, 'stroke-width': w, 'marker-end': 'url(#egArrowEnd)' }));
+    }
+    if (!fits) {   // leader along the dim line out to the displaced text
+      const e = { x: Bo.x + ux * (2.5), y: Bo.y + uy * (2.5) };
+      group.appendChild(el('line', { x1: Bo.x, y1: Bo.y, x2: e.x, y2: e.y, stroke: pal.accent, 'stroke-width': w }));
+    }
+    // upright text, centred on its run, rotated along the dim line
+    const t = el('text', { x: tc.x, y: tc.y, 'font-size': FS, 'font-family': '"IBM Plex Mono", monospace', fill: pal.accent, 'text-anchor': 'middle', transform: `rotate(${ang.toFixed(2)} ${tc.x} ${tc.y})` });
     t.textContent = label; group.appendChild(t);
-    (reg.labels || (reg.labels = [])).push({ x: tc.x, y: tc.y, r: rad });
+    textSamples(tc.x, tc.y - FS * 0.35, ux, uy, tw).forEach(q => reg.samples.push(q));
   }
 
   function render(container, prims, opts = {}) {
@@ -133,8 +191,9 @@ const Svg2D = (function () {
     let vis = prims.filter(p => (p.step == null ? 0 : p.step) <= maxStep);
     if (!showDims) vis = vis.filter(p => p.kind !== 'dimension' && p.kind !== 'dim');
 
-    const b = bounds(vis.length ? vis : prims);
-    const pad = Math.max(16, (b.maxX - b.minX + b.maxY - b.minY) * 0.1);
+    // frame from ALL steps so the drawing does not jump while stepping
+    const b = bounds(showDims ? prims : prims.filter(p => p.kind !== 'dimension' && p.kind !== 'dim'));
+    const pad = Math.max(10, (b.maxX - b.minX + b.maxY - b.minY) * 0.05);
     const W = (b.maxX - b.minX) + pad * 2, H = (b.maxY - b.minY) + pad * 2;
     const sx = x => (x - b.minX) + pad, sy = y => (b.maxY - y) + pad;      // flip Y
     const centroid = { x: sx((b.minX + b.maxX) / 2), y: sy((b.minY + b.maxY) / 2) };
@@ -143,7 +202,7 @@ const Svg2D = (function () {
     svg.appendChild(defsMarkers(pal));
     svg.appendChild(el('rect', { x: 0, y: 0, width: W, height: H, fill: pal.sheet }));
 
-    const reg = { labels: [], centroid };
+    const reg = { samples: [], centroid };
     const dimGroup = el('g', {});    // dims drawn last, on top
 
     const drawLineLike = (node, lenScreen, step) => {
@@ -190,20 +249,42 @@ const Svg2D = (function () {
           const col = (role === 'construction') ? pal.thin : pal.ink;
           svg.appendChild(el('circle', { cx: sx(p.x), cy: sy(p.y), r: 0.85, fill: col }));
           if (p.label) {
-            const dir = p.dir || 'ne';
-            const ox = dir.includes('w') ? -1.8 : dir.includes('e') ? 1.8 : 0;
-            const oy = dir.includes('n') ? -1.8 : dir.includes('s') ? 3.6 : 1.2;
-            const anchor = dir.includes('w') ? 'end' : dir.includes('e') ? 'start' : 'middle';
-            const t = el('text', { x: sx(p.x) + ox, y: sy(p.y) + oy, 'font-size': 4.2, 'font-family': '"IBM Plex Mono", monospace', fill: col, 'text-anchor': anchor });
+            // Keep point labels (a, a', HT, VT, ...) from colliding: try the
+            // requested direction, then the remaining compass directions.
+            const r = Math.max(4, p.label.length * 1.1);
+            const tw = p.label.length * 2.6;                         // approx text width
+            const place = (dir) => {
+              const ox = dir.includes('w') ? -1.8 : dir.includes('e') ? 1.8 : 0;
+              const oy = dir.includes('n') ? -1.8 : dir.includes('s') ? 3.6 : 1.2;
+              const anchor = dir.includes('w') ? 'end' : dir.includes('e') ? 'start' : 'middle';
+              const cx = sx(p.x) + ox + (anchor === 'end' ? -tw / 2 : anchor === 'start' ? tw / 2 : 0);
+              return { ox, oy, anchor, cx, cy: sy(p.y) + oy - 1.4 };
+            };
+            const want = p.dir || 'ne';
+            // alternatives stay on the same side of the point first (a label
+            // below XY should stay below XY), then fall back to the other side
+            const ns = want[0] === 'n' || want[0] === 's' ? want[0] : '';
+            const all = ['ne', 'nw', 'se', 'sw', 'e', 'w', 'n', 's'];
+            const order = [want, ...all.filter(d => d !== want && ns && d[0] === ns), 'e', 'w', ...all.filter(d => d !== want && !(ns && d[0] === ns))]
+              .filter((d, i, arr) => arr.indexOf(d) === i);
+            let pick = place(want);
+            for (const d of order) {
+              const c = place(d);
+              const hit = hits(reg, textSamples(c.cx, c.cy, 1, 0, tw), 3.4);
+              if (!hit) { pick = c; break; }
+            }
+            const t = el('text', { x: sx(p.x) + pick.ox, y: sy(p.y) + pick.oy, 'font-size': 4.2, 'font-family': '"IBM Plex Mono", monospace', fill: col, 'text-anchor': pick.anchor });
             t.textContent = p.label; svg.appendChild(t);
-            reg.labels.push({ x: sx(p.x) + ox, y: sy(p.y) + oy, r: Math.max(4, p.label.length * 1.1) });
+            textSamples(pick.cx, pick.cy, 1, 0, tw).forEach(q => reg.samples.push(q));
           }
           break;
         }
         case 'text': {
           const t = el('text', { x: sx(p.x), y: sy(p.y), 'font-size': p.size || 3.6, 'font-family': '"IBM Plex Mono", monospace', fill: p.color || pal.muted, 'text-anchor': p.anchor || 'start' });
           t.textContent = p.text; svg.appendChild(t);
-          reg.labels.push({ x: sx(p.x), y: sy(p.y), r: Math.max(4, (p.text || '').length * 1.0) });
+          { const fs = p.size || 3.6, w = (p.text || '').length * fs * CW, a = p.anchor || 'start';
+            const cx = sx(p.x) + (a === 'start' ? w / 2 : a === 'end' ? -w / 2 : 0);
+            textSamples(cx, sy(p.y) - fs * 0.35, 1, 0, w).forEach(q => reg.samples.push(q)); }
           break;
         }
         case 'dim': case 'dimension': {

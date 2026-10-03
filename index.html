@@ -1,140 +1,73 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
 <title>EG Studio — KTU Engineering Graphics</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%97%B1%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231E1D1B'/%3E%3Cpath d='M3 12l10-4v16l-10-4z' fill='none' stroke='%23D8432B' stroke-width='2'/%3E%3Ccircle cx='23' cy='16' r='7' fill='none' stroke='%23D8432B' stroke-width='2'/%3E%3Ccircle cx='23' cy='16' r='3' fill='none' stroke='%23D8432B' stroke-width='2'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-<header class="topbar">
-  <button id="railToggle" class="icon-btn" aria-label="Open module menu" aria-expanded="false">☰</button>
-  <div class="masthead">
-    <span class="logo-mark" aria-hidden="true">◱</span>
-    <div class="masthead-text">
-      <h1>EG&nbsp;STUDIO</h1>
-      <p>Engineering Graphics · KTU · First-angle projection</p>
+<a class="skip" href="#workbench">Skip to drawing</a>
+
+<header class="app-header">
+  <button id="navToggle" class="nav-toggle" aria-label="Open module list" aria-controls="sidebar" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="brand">
+    <!-- first-angle projection symbol (BIS SP:46) used as the brand mark -->
+    <svg class="brand-mark" viewBox="0 0 44 24" aria-hidden="true">
+      <path d="M3 8L17 3v18L3 16z"/><circle cx="33" cy="12" r="9"/><circle cx="33" cy="12" r="4.5"/>
+      <path class="cl" d="M0 12h44M33 1v22"/>
+    </svg>
+    <div>
+      <h1>EG Studio</h1>
+      <p class="tagline">KTU Engineering Graphics · First angle projection</p>
     </div>
   </div>
-  <div class="topbar-right">
-    <select id="modSelect" class="mod-select" aria-label="Select module"></select>
-    <button id="themeToggle" class="icon-btn" aria-label="Toggle light or dark theme" title="Toggle theme">◐</button>
+  <div class="header-right">
+    <span class="header-meta">BIS SP:46 · all dimensions in mm</span>
+    <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false" title="Switch light / dark">
+      <span class="tt-label">Light</span>
+    </button>
   </div>
 </header>
 
-<div class="deck">
-  <!-- LEFT RAIL : module index + active form + results -->
-  <aside id="rail" class="rail" aria-label="Modules and inputs">
-    <section class="rail-block">
-      <h2 class="rail-title">Modules</h2>
-      <ol id="modNav" class="modnav"></ol>
-    </section>
-    <section class="rail-block">
-      <h2 class="rail-title" id="formTitle">Inputs</h2>
-      <div id="formHost" class="formhost"></div>
-      <p class="field-err" id="formError" role="alert"></p>
-      <div class="btn-row">
-        <button class="btn btn-accent" id="btnDraw">Draw</button>
-        <button class="btn" id="btnReset">Reset</button>
-      </div>
-    </section>
-    <section class="rail-block">
-      <h2 class="rail-title">Results</h2>
-      <table class="results" id="resultsHost"><tbody><tr><td class="rk">Press Draw</td><td class="rv">—</td></tr></tbody></table>
-    </section>
-  </aside>
+<div class="layout">
+  <!-- Module navigation -->
+  <nav id="sidebar" class="sidebar" aria-label="Modules">
+    <div class="sidebar-section-title">Modules</div>
+    <ul id="moduleList" class="module-list"><!-- filled by JS --></ul>
+    <div class="sidebar-footer">
+      <p>First angle projection<br/>Indian standard (BIS SP:46)</p>
+    </div>
+  </nav>
+  <div id="navScrim" class="nav-scrim" hidden></div>
 
-  <!-- CENTRE : drawing sheet + toolbar + timeline -->
-  <main class="stage">
-    <div class="sheet-toolbar">
-      <label class="switch"><input type="checkbox" id="toggleDims" checked /> <span>Show dimensions</span></label>
-      <div class="legend" id="legend"></div>
-      <div class="toolbar-actions">
-        <button class="btn" id="btnPng">Export PNG</button>
-        <button class="btn" id="btnPdf">Export PDF</button>
-      </div>
-    </div>
-
-    <div class="sheet-scroll" id="sheetScroll">
-      <div class="sheet" id="sheet">
-        <div class="sheet-inner">
-          <div class="svg-host" id="sheetSvg"></div>
-        </div>
-        <!-- Title block (bottom-right) -->
-        <div class="titleblock" id="titleblock">
-          <div class="tb-row tb-topic"><span class="tb-k">Title</span><span class="tb-v" id="tbTopic">—</span></div>
-          <div class="tb-grid">
-            <div class="tb-cell"><span class="tb-k">Scale</span><span class="tb-v" id="tbScale">1:1</span></div>
-            <div class="tb-cell tb-proj"><span class="tb-k">Projection</span>
-              <svg class="firstangle" viewBox="0 0 60 26" aria-label="First angle projection symbol">
-                <g fill="none" stroke="currentColor" stroke-width="1">
-                  <path d="M4,4 L20,4 L16,13 L8,13 Z"/>
-                  <path d="M4,22 L20,22 L16,13 L8,13"/>
-                  <circle cx="44" cy="13" r="9"/><circle cx="44" cy="13" r="4"/>
-                  <line x1="31" y1="13" x2="57" y2="13"/><line x1="44" y1="2" x2="44" y2="24"/>
-                </g>
-              </svg>
-            </div>
-            <div class="tb-cell"><span class="tb-k">Sheet</span><span class="tb-v" id="tbSheet">01</span></div>
-            <div class="tb-cell"><span class="tb-k">Date</span><span class="tb-v" id="tbDate">—</span></div>
-          </div>
-          <div class="tb-row tb-note"><span class="tb-v">ALL DIMENSIONS IN MM</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="timeline-wrap">
-      <div class="timeline-head">
-        <h2 class="rail-title">Construction steps</h2>
-        <div class="step-controls">
-          <button class="btn btn-sm" id="btnPrev">‹ Prev</button>
-          <button class="btn btn-sm" id="btnNext">Next ›</button>
-          <button class="btn btn-sm" id="btnAll">Show all</button>
-        </div>
-      </div>
-      <ol class="timeline" id="timeline"></ol>
-      <div class="step-detail" id="stepDetail">Press <b>Draw</b> to begin the construction.</div>
-    </div>
-  </main>
-
-  <!-- RIGHT : collapsible 3D drawer -->
-  <aside id="drawer" class="drawer open" aria-label="3D view">
-    <div class="drawer-head">
-      <h2 class="rail-title">3D pictorial</h2>
-      <div class="drawer-actions">
-        <label class="switch sm"><input type="checkbox" id="togglePlanes" checked /> <span>HP / VP</span></label>
-        <button class="icon-btn" id="drawerToggle" aria-label="Collapse 3D view" title="Collapse">⟩</button>
-      </div>
-    </div>
-    <div class="three-host">
-      <canvas id="three-canvas"></canvas>
-      <div class="three-overlay" id="threeEmpty" hidden>
-        <div class="spinner" aria-hidden="true"></div>
-        <p>Preparing 3D model…</p>
-      </div>
-      <div class="three-hint">drag to orbit · scroll / pinch to zoom</div>
-    </div>
-  </aside>
-  <button id="drawerReopen" class="drawer-reopen" aria-label="Open 3D view" hidden>3D ⟨</button>
+  <!-- Main workbench (rendered by workbench.js) -->
+  <main id="workbench" class="workbench" tabindex="-1"></main>
 </div>
 
-<!-- Vendored libraries (offline) -->
+<!-- Vendored libraries (work fully offline) -->
 <script src="vendor/three.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
-<!-- Core engine -->
+
+<!-- Core engine: math (geometry) is separate from rendering (svg2d, three3d) -->
 <script src="js/core/geometry.js"></script>
 <script src="js/core/svg2d.js"></script>
 <script src="js/core/three3d.js"></script>
 <script src="js/core/exporter.js"></script>
 <script src="js/core/workbench.js"></script>
+
 <!-- Data -->
 <script src="js/data/problems.js"></script>
-<!-- App controller (defines App.register used by modules) -->
+
+<!-- App controller (defines App.register used by the modules below) -->
 <script src="js/app.js"></script>
+
 <!-- Modules -->
 <script src="js/modules/points.js"></script>
 <script src="js/modules/lines.js"></script>

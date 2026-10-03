@@ -1,70 +1,74 @@
 /* =====================================================================
-   app.js — registry, navigation (rail list + mobile dropdown), theme
-   toggle, and the collapsible 3D drawer. Modules self-register here.
+   app.js — application controller: module registry, sidebar navigation,
+   mobile menu, light/dark theme, and initial mount.
    ===================================================================== */
 const App = (function () {
   const modules = [];
   function register(def) { modules.push(def); modules.sort((a, b) => a.num - b.num); }
+  const pad2 = (n) => String(n).padStart(2, '0');
 
   function buildNav() {
-    const ol = document.getElementById('modNav');
-    const sel = document.getElementById('modSelect');
-    ol.innerHTML = ''; sel.innerHTML = '';
+    const ul = document.getElementById('moduleList');
+    ul.innerHTML = '';
     modules.forEach(m => {
-      const li = document.createElement('li');
       const soon = m.status === 'soon';
+      const li = document.createElement('li');
       li.innerHTML = `<button data-mod="${m.id}" class="${soon ? 'soon' : ''}">
-        <span class="m-no">${String(m.num).padStart(2, '0')}</span>
-        <span class="m-label">${m.title}</span>
-        ${soon ? '<span class="m-soon">coming soon</span>' : ''}
+        <span class="mnum">${pad2(m.num)}</span>
+        <span class="mlabel">${m.title}</span>
+        <span class="mstatus ${soon ? '' : 'ready'}">${soon ? 'coming soon' : ''}</span>
       </button>`;
-      ol.appendChild(li);
-      const opt = document.createElement('option');
-      opt.value = m.id; opt.textContent = `${String(m.num).padStart(2, '0')} · ${m.title}${soon ? ' (soon)' : ''}`;
-      sel.appendChild(opt);
+      ul.appendChild(li);
     });
-    ol.addEventListener('click', e => { const b = e.target.closest('button[data-mod]'); if (b) { select(b.dataset.mod); closeRail(); } });
-    sel.addEventListener('change', e => select(e.target.value));
+    ul.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-mod]'); if (!btn) return;
+      selectModule(btn.dataset.mod);
+      setNav(false);
+    });
   }
 
-  function select(id) {
+  function setNav(open) {
+    document.getElementById('sidebar').classList.toggle('open', open);
+    document.getElementById('navScrim').hidden = !open;
+    document.getElementById('navToggle').setAttribute('aria-expanded', String(open));
+  }
+
+  function selectModule(id) {
     const m = modules.find(x => x.id === id); if (!m) return;
-    document.querySelectorAll('#modNav button').forEach(b => b.classList.toggle('active', b.dataset.mod === id));
-    document.getElementById('modSelect').value = id;
+    document.querySelectorAll('#moduleList button').forEach(b => {
+      const on = b.dataset.mod === id;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
     Workbench.mount(m);
     try { localStorage.setItem('eg-last', id); } catch (e) {}
   }
 
-  const closeRail = () => document.getElementById('rail').classList.remove('open');
-
+  /* light / dark: the UI flips; the 2D paper stays cream like a real sheet */
   function applyTheme(name) {
     document.documentElement.setAttribute('data-theme', name);
-    document.getElementById('themeToggle').textContent = name === 'dark' ? '◑' : '◐';
+    const t = document.getElementById('themeToggle');
+    t.setAttribute('aria-pressed', String(name === 'light'));
+    t.querySelector('.tt-label').textContent = name === 'light' ? 'Dark' : 'Light';
+    t.setAttribute('aria-label', `Switch to ${name === 'light' ? 'dark' : 'light'} theme`);
     Workbench.setTheme(name);
     try { localStorage.setItem('eg-theme', name); } catch (e) {}
   }
 
-  function initDrawer() {
-    const drawer = document.getElementById('drawer');
-    const reopen = document.getElementById('drawerReopen');
-    const setOpen = (open) => { drawer.classList.toggle('open', open); reopen.hidden = open; };
-    document.getElementById('drawerToggle').addEventListener('click', () => setOpen(false));
-    reopen.addEventListener('click', () => setOpen(true));
-    document.getElementById('togglePlanes').addEventListener('change', e => Workbench.setPlanesVisible(e.target.checked));
-  }
-
   function init() {
+    let theme = 'dark'; try { theme = localStorage.getItem('eg-theme') || 'dark'; } catch (e) {}
     buildNav();
     Workbench.bind();
-    initDrawer();
-    document.getElementById('railToggle').addEventListener('click', () => document.getElementById('rail').classList.toggle('open'));
+    document.getElementById('navToggle').addEventListener('click', () =>
+      setNav(!document.getElementById('sidebar').classList.contains('open')));
+    document.getElementById('navScrim').addEventListener('click', () => setNav(false));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') setNav(false); });
     document.getElementById('themeToggle').addEventListener('click', () =>
-      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
-
-    let theme = 'light'; try { theme = localStorage.getItem('eg-theme') || 'light'; } catch (e) {}
+      applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'));
+    document.documentElement.setAttribute('data-theme', theme);
     applyTheme(theme);
     let last = null; try { last = localStorage.getItem('eg-last'); } catch (e) {}
-    select((last && modules.some(m => m.id === last)) ? last : modules[0].id);
+    selectModule((last && modules.some(m => m.id === last)) ? last : modules[0].id);
   }
 
   return { register, init, modules };

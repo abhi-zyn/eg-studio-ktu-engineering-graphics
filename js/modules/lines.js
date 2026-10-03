@@ -160,26 +160,46 @@
     const tvA = { x: A.x, y: -A.d }, tvB = { x: B.x, y: -B.d };
     const D = [];
     // heights above XY (a', b')
-    if (A.h !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: A.h, label: `${f2(A.h)} mm`, prefer: 'left', off: 9 });
-    if (B.h !== 0 && kase !== 'perpVP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: B.h, label: `${f2(B.h)} mm`, prefer: 'right', off: 9 });
+    // a'/a dimensions sit LEFT of everything at A (including HT/VT, which can lie left of A)
+    const leftMost = Math.min(0, tr.HT ? tr.HT.x : 0, tr.VT ? tr.VT.x : 0);
+    const offA = 9 + (A.x - leftMost);
+    if (A.h !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: A.h, label: `${f2(A.h)} mm`, prefer: 'left', off: offA });
+    // b'/b dimensions sit RIGHT of everything (the swing arcs reach x = TL)
+    const swings = ['both', 'inclHP', 'inclVP'].includes(kase);
+    const rightMost = Math.max(B.x, swings ? TL : B.x, tr.HT ? tr.HT.x : B.x, tr.VT ? tr.VT.x : B.x);
+    const offB = 9 + (rightMost - B.x);
+    if (B.h !== 0 && kase !== 'perpVP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: B.h, label: `${f2(B.h)} mm`, prefer: 'right', off: offB });
     // distances below XY (a, b)
-    if (A.d !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: -A.d, label: `${f2(A.d)} mm`, prefer: 'left', off: 16 });
-    if (B.d !== 0 && kase !== 'perpHP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: -B.d, label: `${f2(B.d)} mm`, prefer: 'right', off: 16 });
+    if (A.d !== 0) D.push({ x1: A.x, y1: 0, x2: A.x, y2: -A.d, label: `${f2(A.d)} mm`, prefer: 'left', off: offA });
+    if (B.d !== 0 && kase !== 'perpHP') D.push({ x1: B.x, y1: 0, x2: B.x, y2: -B.d, label: `${f2(B.d)} mm`, prefer: 'right', off: offB });
     // apparent lengths of the two views (with the cos relation when inclined to both)
+    // Length labels show the working so students see WHY each view has that length:
+    // a view parallel to the plane it is projected on shows TL; otherwise TL·cos(angle).
+    const fvLabel = () => {
+      if (kase === 'both' || kase === 'inclVP') return `a'b' = ${TL} cos ${phi}° = ${f2(R.fv.len)} mm`;
+      return `a'b' = TL = ${f2(R.fv.len)} mm`;               // parallel / ⊥HP / inclined to HP
+    };
+    const tvLabel = () => {
+      if (kase === 'both' || kase === 'inclHP') return `ab = ${TL} cos ${theta}° = ${f2(R.tv.len)} mm`;
+      return `ab = TL = ${f2(R.tv.len)} mm`;                 // parallel / ⊥VP / inclined to VP
+    };
     const fvPt = Math.hypot(fvB.x - fvA.x, fvB.y - fvA.y) < 1e-6;
     const tvPt = Math.hypot(tvB.x - tvA.x, tvB.y - tvA.y) < 1e-6;
     if (!fvPt) D.push({ x1: fvA.x, y1: fvA.y, x2: fvB.x, y2: fvB.y, prefer: 'up', off: 7,
-      label: kase === 'both' ? `a'b' = ${TL} cos ${phi}° = ${f2(R.fv.len)}` : `a'b' = ${f2(R.fv.len)} mm` });
+      label: fvLabel() });
     if (!tvPt) D.push({ x1: tvA.x, y1: tvA.y, x2: tvB.x, y2: tvB.y, prefer: 'down', off: 7,
-      label: kase === 'both' ? `ab = ${TL} cos ${theta}° = ${f2(R.tv.len)}` : `ab = ${f2(R.tv.len)} mm` });
+      label: tvLabel() });
     // true-length line (rotating-line method draws it explicitly for 'both')
     if (kase === 'both') {
       const b1p = { x: TL * C(theta), y: aH + TL * S(theta) };
-      D.push({ x1: 0, y1: aH, x2: b1p.x, y2: b1p.y, label: `TL = ${f2(TL)} mm`, prefer: 'up', off: 7 });
+      D.push({ x1: 0, y1: aH, x2: b1p.x, y2: b1p.y, label: `TL = ${f2(TL)} mm`, prefer: 'down', off: 6 });   // below b1': a'b' lies above TL
     }
     // trace distances from the projector of A
-    if (tr.HT && Math.abs(tr.HT.x) > 1) D.push({ x1: 0, y1: -A.d, x2: tr.HT.x, y2: -A.d, label: `HT ${f2(Math.abs(tr.HT.x))} mm`, prefer: 'down', off: 11 });
-    if (tr.VT && Math.abs(tr.VT.x) > 1) D.push({ x1: 0, y1: A.h, x2: tr.VT.x, y2: A.h, label: `VT ${f2(Math.abs(tr.VT.x))} mm`, prefer: 'up', off: 11 });
+    // measured along XY between each trace's projector and A's projector:
+    // VT distance just above XY, HT distance just below XY. p2 = A's projector,
+    // so a label too long for a short dim is pushed past A (away from the a/a' dims).
+    if (tr.HT && Math.abs(tr.HT.x) > 1) D.push({ x1: tr.HT.x, y1: 0, x2: 0, y2: 0, label: `HT ${f2(Math.abs(tr.HT.x))} mm`, prefer: 'down', off: 6 });
+    if (tr.VT && Math.abs(tr.VT.x) > 1) D.push({ x1: tr.VT.x, y1: 0, x2: 0, y2: 0, label: `VT ${f2(Math.abs(tr.VT.x))} mm`, prefer: 'up', off: 6 });
     D.forEach(d => prims.push(Object.assign({ kind: 'dimension', step: DS }, d)));
 
     // ----- results -----

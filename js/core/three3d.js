@@ -13,7 +13,7 @@ const Three3D = (function () {
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
       this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
       this.scene = new THREE.Scene();
-      this.scene.background = new THREE.Color(0x0b1016);
+      this.scene.background = new THREE.Color(0x171614);
       this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
       this.target = new THREE.Vector3(0, 0, 0);
       this.dynamic = new THREE.Group();        // cleared each rebuild
@@ -33,7 +33,7 @@ const Three3D = (function () {
       this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
       const d = new THREE.DirectionalLight(0xffffff, 0.8); d.position.set(80, 140, 120);
       this.scene.add(d);
-      const d2 = new THREE.DirectionalLight(0x88aaff, 0.3); d2.position.set(-100, 60, -80);
+      const d2 = new THREE.DirectionalLight(0xffe6cc, 0.3); d2.position.set(-100, 60, -80);
       this.scene.add(d2);
     }
 
@@ -42,28 +42,28 @@ const Three3D = (function () {
       // HP (horizontal, Y=0) spanning X & Z
       const hp = new THREE.Mesh(
         new THREE.PlaneGeometry(S, S),
-        new THREE.MeshBasicMaterial({ color: 0x264a3a, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false })
+        new THREE.MeshBasicMaterial({ color: 0x8A7A5A, transparent: true, opacity: 0.30, side: THREE.DoubleSide, depthWrite: false })
       );
       hp.rotation.x = -Math.PI / 2; hp.position.set(S / 2 - 15, 0, S / 2 - 15);
       this._planeObjs = this._planeObjs || [];
       // VP (vertical, Z=0) spanning X & Y
       const vp = new THREE.Mesh(
         new THREE.PlaneGeometry(S, S),
-        new THREE.MeshBasicMaterial({ color: 0x24436b, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false })
+        new THREE.MeshBasicMaterial({ color: 0x5E6B73, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false })
       );
       vp.position.set(S / 2 - 15, S / 2 - 15, 0);
       this.scene.add(hp); this.scene.add(vp);
       // grid on HP
-      const grid = new THREE.GridHelper(S, 12, 0x3a5a4a, 0x22332c);
+      const grid = new THREE.GridHelper(S, 12, 0x7a7262, 0x4a463e);
       grid.position.set(S / 2 - 15, 0.02, S / 2 - 15); this.scene.add(grid);
       this._planeObjs.push(hp, vp, grid);
       // XY reference line (intersection of HP & VP) -> X axis
-      this.scene.add(this._tube([[-18, 0, 0], [S - 15, 0, 0]], 0x000000, 0.7, 0xffffff));
+      this.scene.add(this._tube([[-18, 0, 0], [S - 15, 0, 0]], 0xD8432B, 0.45, 0xffffff));
       // small axis labels via sprites
-      this._planeObjs.push(this._addLabel('HP', new THREE.Vector3(S - 20, 0.5, 40), '#9fe0c0'));
-      this._planeObjs.push(this._addLabel('VP', new THREE.Vector3(S - 20, 40, 0.5), '#9fc4ff'));
-      this._addLabel('X', new THREE.Vector3(-22, 0, 0), '#ffffff');
-      this._addLabel('Y', new THREE.Vector3(S - 12, 0, 0), '#ffffff');
+      this._planeObjs.push(this._addLabel('HP', new THREE.Vector3(S - 20, 0.5, 40), '#B8995C'));
+      this._planeObjs.push(this._addLabel('VP', new THREE.Vector3(S - 20, 40, 0.5), '#7F97A4'));
+      this._addLabel('X', new THREE.Vector3(-22, 0, 0), '#D8432B');
+      this._addLabel('Y', new THREE.Vector3(S - 12, 0, 0), '#D8432B');
     }
 
     _addLabel(text, pos, color = '#ddd') {
@@ -130,7 +130,8 @@ const Three3D = (function () {
     setView(az, el, distF) { this.az = az; this.el = el; this.distF = distF; this._baseDist = 170; this._place(); }
     _place() {
       const a = this.az * Math.PI / 180, e = this.el * Math.PI / 180;
-      const d = this._baseDist * this.distF;
+      // pull the camera back in tall/narrow panels so the object stays framed
+      const d = this._baseDist * this.distF * (this._aspectK || 1);
       const cx = this.target.x, cy = this.target.y, cz = this.target.z;
       this.camera.position.set(
         cx + d * Math.cos(e) * Math.sin(a),
@@ -145,6 +146,8 @@ const Three3D = (function () {
       const w = Math.max(10, r.width), h = Math.max(10, r.height);
       this.renderer.setSize(w, h, false);
       this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+      const k = Math.max(1, 1.25 / this.camera.aspect);
+      if (Math.abs(k - (this._aspectK || 1)) > 1e-3) { this._aspectK = k; this._place(); }
     }
 
     clearDynamic() { while (this.dynamic.children.length) { const c = this.dynamic.children.pop(); c.traverse?.(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); }); this.dynamic.remove(c); } this.unfold = null; }
@@ -165,52 +168,52 @@ const Three3D = (function () {
       if (!spec) return;
       const add = o => this.dynamic.add(o);
       const V = p => new THREE.Vector3(p.x, p.y, p.z);
-      const mkDot = (p, color = 0xff5252, label) => {
+      const mkDot = (p, color = 0xE4573C, label) => {
         const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshStandardMaterial({ color }));
         m.position.copy(V(p)); add(m);
-        if (label) this._addDynLabel(label, V(p).add(new THREE.Vector3(2, 2, 0)), '#ffd27f');
+        if (label) this._addDynLabel(label, V(p).add(new THREE.Vector3(2, 2, 0)), '#ECE7DA');
       };
       const projLines = (p) => {
         // drop to HP (y=0) and to VP (z=0)
-        add(this._tube([[p.x, p.y, p.z], [p.x, 0, p.z]], 0x8a93a0, 0.18));  // to HP (plan)
-        add(this._tube([[p.x, p.y, p.z], [p.x, p.y, 0]], 0x8a93a0, 0.18));  // to VP (elevation)
-        mkDot({ x: p.x, y: 0, z: p.z }, 0x7ee0a0);  // top view point on HP
-        mkDot({ x: p.x, y: p.y, z: 0 }, 0x7eb8ff);  // front view point on VP
+        add(this._tube([[p.x, p.y, p.z], [p.x, 0, p.z]], 0x8C8678, 0.18));  // to HP (plan)
+        add(this._tube([[p.x, p.y, p.z], [p.x, p.y, 0]], 0x8C8678, 0.18));  // to VP (elevation)
+        mkDot({ x: p.x, y: 0, z: p.z }, 0xC9A35A);  // top view point on HP
+        mkDot({ x: p.x, y: p.y, z: 0 }, 0x9FB4C0);  // front view point on VP
       };
 
       if (spec.type === 'points') {
         const items = spec.items || [];
         this._frame(items.map(V));
-        items.forEach(p => { mkDot(p, 0xff5252, p.label); if (spec.projections) projLines(p); });
+        items.forEach(p => { mkDot(p, 0xE4573C, p.label); if (spec.projections) projLines(p); });
       }
       else if (spec.type === 'line') {
         const a = spec.a, b = spec.b;
         this._frame([V(a), V(b)]);
-        add(this._tube([[a.x, a.y, a.z], [b.x, b.y, b.z]], 0x111111, 0.6));
-        mkDot(a, 0xff5252, spec.labelA || 'A'); mkDot(b, 0xff5252, spec.labelB || 'B');
+        add(this._tube([[a.x, a.y, a.z], [b.x, b.y, b.z]], 0xECE7DA, 0.6));
+        mkDot(a, 0xE4573C, spec.labelA || 'A'); mkDot(b, 0xE4573C, spec.labelB || 'B');
         if (spec.projections) {
           // front view (on VP) and top view (on HP)
-          add(this._tube([[a.x, a.y, 0], [b.x, b.y, 0]], 0x7eb8ff, 0.4));
-          add(this._tube([[a.x, 0, a.z], [b.x, 0, b.z]], 0x7ee0a0, 0.4));
+          add(this._tube([[a.x, a.y, 0], [b.x, b.y, 0]], 0x9FB4C0, 0.4));
+          add(this._tube([[a.x, 0, a.z], [b.x, 0, b.z]], 0xC9A35A, 0.4));
           projLines(a); projLines(b);
         }
         if (spec.traces) {
-          if (spec.traces.HT) mkDot({ x: spec.traces.HT.x, y: 0, z: spec.traces.HT.d }, 0xffb454, 'HT');
-          if (spec.traces.VT) mkDot({ x: spec.traces.VT.x, y: spec.traces.VT.h, z: 0 }, 0xffb454, 'VT');
+          if (spec.traces.HT) mkDot({ x: spec.traces.HT.x, y: 0, z: spec.traces.HT.d }, 0xF4EFE3, 'HT');
+          if (spec.traces.VT) mkDot({ x: spec.traces.VT.x, y: spec.traces.VT.h, z: 0 }, 0xF4EFE3, 'VT');
         }
       }
       else if (spec.type === 'polygon') {
         const vs = spec.verts.map(V);
         this._frame(vs);
         const geo = new THREE.BufferGeometry().setFromPoints(vs.concat([vs[0]]));
-        add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x111111 })));
+        add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xECE7DA })));
         if (spec.face) {
           const shapeGeo = new THREE.BufferGeometry().setFromPoints(vs);
           const idx = []; for (let i = 1; i < vs.length - 1; i++) idx.push(0, i, i + 1);
           shapeGeo.setIndex(idx); shapeGeo.computeVertexNormals();
-          add(new THREE.Mesh(shapeGeo, new THREE.MeshStandardMaterial({ color: 0xffb454, transparent: true, opacity: 0.6, side: THREE.DoubleSide })));
+          add(new THREE.Mesh(shapeGeo, new THREE.MeshStandardMaterial({ color: 0xD8432B, transparent: true, opacity: 0.45, side: THREE.DoubleSide })));
         }
-        (spec.labels || []).forEach((t, i) => vs[i] && this._addDynLabel(t, vs[i].clone().add(new THREE.Vector3(2, 2, 0)), '#ffd27f'));
+        (spec.labels || []).forEach((t, i) => vs[i] && this._addDynLabel(t, vs[i].clone().add(new THREE.Vector3(2, 2, 0)), '#ECE7DA'));
       }
       else if (spec.type === 'solid') {
         const m = this._buildSolid(spec);

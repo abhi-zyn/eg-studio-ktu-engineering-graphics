@@ -87,43 +87,35 @@ eg-tool/
 
 ---
 
-## v2 — Drafting-office redesign + dimensioning (what changed)
+## v3 — Original layout restored, restyled, with dimensions
 
-**Design (PART 1).** New "engineering drawing office" theme: warm-graphite / drafting-grey
-UI, a cream drawing sheet (`#F4EFE3`), a single vermilion accent (`#D8432B`), Space Grotesk
-(UI) + IBM Plex Mono (numbers/labels) from Google Fonts, sharp corners, 1px hairlines, an
-8px grid and no shadows/glows. Layout is a slim **left rail** (numbered modules 01–10 with
-plain "coming soon" text + the active form + a results table), a centre **drawing sheet**
-with a double border, centre marks and a bottom-right **title block** (topic · scale ·
-first-angle symbol · sheet · date · "ALL DIMENSIONS IN MM"), a collapsible **3D drawer** on
-the right (with HP/VP show-hide and a loading/empty state), and a numbered **step timeline**
-with the current step in vermilion. BIS SP:46 line styles (thick visible, thin construction,
-dashed hidden, **chain-line XY**) with a legend. Responsive (rail → top dropdown, 3D →
-bottom sheet), subtle `stroke-dashoffset` step draw-in that respects
-`prefers-reduced-motion`, AA contrast, visible focus rings, labelled inputs, and a
-**light/dark toggle**.
+The v2 "title block / drawer / timeline" layout was replaced by the **original v1 layout**
+(header · module sidebar · Inputs + Results | 2D views | 3D pictorial · construction steps ·
+theory / samples / practice tabs). Only the look changed, and dimensioning was kept.
 
-**Dimensioning (PART 2).** New reusable `Svg2D.dimension(group, p1, p2, label, opts)` with
-two thin extension lines, an offset dimension line, **SVG arrowhead markers** at both ends,
-and centred text rotated along the line but kept upright. It marks true length, the apparent
-lengths `a'b'` and `ab` (shown as e.g. `a'b' = 70 cos 45° = 49.50`), the heights of a'/b'
-above XY, the depths of a/b below XY, and the HT/VT distances from A's projector — all to
-2 dp with `mm`. Overlapping labels **auto-offset**, and a collision registry keeps dimension
-text clear of the point/trace labels. A **Show dimensions** toggle controls them and they are
-included in the PNG/PDF exports. The same system is ready for planes and solids.
+**Look (no "AI template" styling).** Warm graphite UI (`#1E1D1B`) with a cream drawing paper
+(`#F4EFE3`) for the 2D views, one accent (vermilion `#D8432B`), Space Grotesk + IBM Plex Mono,
+2px corners, 1px hairlines, no shadows, gradients, pill badges or emoji. Module numbers 01–10
+with plain "coming soon" text, underline tabs, a numbered step bar, mono results table, a
+first-angle projection symbol as the logo, and a light/dark toggle (the paper stays cream).
 
-**Fixes (PART 3).** Projection math is untouched (`geometry.js` and every module's
-`compute()` are unchanged in logic). The HT/VT label clutter at XY was fixed by dropping the
-redundant `v`/`h'` letters and routing dimension labels through the collision registry. The
-empty 3D panel now has a proper loading/empty overlay, fills its drawer, and has an HP/VP
-visibility toggle.
+**Dimensions on the 2D drawing** (`Svg2D.dimension`, reusable for planes/solids later):
+aligned dimensions with extension lines, arrowheads, upright rotated text, values to 2 dp + mm.
+Lines show TL, a'b' and ab with their working (e.g. `ab = 70 cos 30° = 60.62 mm`), heights of
+a'/b' above XY, depths of a/b below XY, and HT/VT distances from A's projector. Short dims put
+arrows outside; labels are collision-checked along their full length (no HT/VT overlap at XY).
+A **Dimensions** checkbox controls the sheet and the PNG/PDF export.
 
-### Files changed
-- `index.html` — rebuilt skeleton (rail, sheet + title block, 3D drawer, timeline).
-- `css/styles.css` — full drafting-office theme + light/dark + responsive + motion.
-- `js/core/svg2d.js` — dimension system, arrowheads, chain-line XY, theme palettes, draw-in.
-- `js/core/three3d.js` — `setPlanesVisible()` + `setBackground()` (empty-state handled in UI).
-- `js/core/workbench.js` — drives the new layout; theme / planes / dimensions toggles.
-- `js/app.js` — rail + mobile-dropdown nav, theme toggle, collapsible drawer.
-- `js/modules/points.js`, `js/modules/lines.js` — emit the new aligned dimensions.
-- `js/core/geometry.js`, `js/core/exporter.js`, modules 3–10 — unchanged logic.
+**Fixes.** *Draw* now shows the finished drawing (v1 showed only step 1, which looked empty);
+use *From step 1* / *Next* to replay. 3D panel fills its card (no empty space) and has an
+**HP / VP** toggle; the camera re-frames for tall panels. Sheet supports wheel / drag / pinch
+zoom with + / − / fit (exports always use the fitted view). Frame stays fixed while stepping.
+
+**Unchanged.** `geometry.js`, every module's projection math, steps, traces, theory, samples,
+practice and the exporter.
+
+### Files changed in v3
+`index.html`, `css/styles.css`, `js/app.js`, `js/core/workbench.js` (v1 layout restored + new
+controls), `js/core/svg2d.js` (dimension placement, label collision, framing),
+`js/core/three3d.js` (colours, framing only), `js/modules/lines.js` (dimension labels/placement
+only — math untouched).
